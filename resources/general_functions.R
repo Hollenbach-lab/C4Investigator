@@ -9,6 +9,20 @@ nucListConv <- list('A'=1,
                     'G'=4,
                     '.'=5)
 
+## Creating the results direcotry object class
+pathObj <- setRefClass("pathObj",
+                       fields=list(name='character',
+                                   path='character',
+                                   subDir='list'))
+
+pathObj$methods(
+  dirGen= function(){
+    if(!file.exists(path)) dir.create(path, recursive = T, showWarnings = F)
+    path <<- normalizePath(path, mustWork = T)
+    invisible(path)
+  }
+)
+
 ## This function checks to make sure the output of system2 is valid
 check.system2_output <- function(system2_output, system2_error){
   
