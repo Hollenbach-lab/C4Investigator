@@ -447,6 +447,7 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
                                    'mean_c4a', 'mean_c4b', 'c4aL', 'c4bL')] <- c(medianc4DepthNum, deletionDepth, nonDeletionDepth, medianTnxbDepthNum,
                                                                                  c4aSnpGroup1Mean, c4aSnpGroup2Mean, c4bSnpGroup1Mean, c4bSnpGroup2Mean, c4aMean, c4bMean, c4aLongSnp, c4bLongSnp)
     
+    write.csv(c4BuildDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_dp.csv')))                                  
     write.csv(resultsDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_depth.csv')))
     file.remove(currentSample[['mhcBamPath']])
     file.remove(currentSample[['bamPath']])
