@@ -10,7 +10,7 @@ rule index_cram:
         mem_mb=2000,
         time=str(timedelta(minutes=30))
     threads:
-        8
+        4
     shell:
         """samtools index -@ {threads} {input}"""
 
@@ -27,10 +27,9 @@ rule index_bam:
         mem_mb=2000,
         time=str(timedelta(minutes=30))
     threads:
-        8
+        4
     shell:
         """samtools index -@ {threads} {input}"""
-
 
 
 rule cram2fastq:
@@ -42,7 +41,7 @@ rule cram2fastq:
     output:
         fq1="../input/{pref}/fastq/{sample}_MHC_1.fastq.gz",
         fq2="../input/{pref}/fastq/{sample}_MHC_2.fastq.gz"
-    threads: 8
+    threads: 4
     conda:
         "../../envs/c4investigator.yaml"      
     shell:
@@ -58,7 +57,7 @@ rule bam2fastq:
     output:
         fq1="../input/{pref}/fastq/{sample}_MHC_1.fastq.gz",
         fq2="../input/{pref}/fastq/{sample}_MHC_2.fastq.gz"
-    threads: 8
+    threads: 4
     conda:
         "../../envs/c4investigator.yaml"      
     shell:
@@ -87,6 +86,6 @@ rule run_C4Investigator:
     log:
         "../output/{pref}/{sample}_log.txt"        
     threads:
-        16
+        4
     script:
         """../scripts/C4Investigator_run.R"""

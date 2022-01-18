@@ -383,6 +383,22 @@ samfile.read_whole_genome_sam <- function(sam_path, rows_to_skip=26){
   colnames(output.samTable)[6] <- 'cigar_string'
   colnames(output.samTable)[10] <- 'read_seq'
   
+  ## Convert the alignment scores into integers
+  alignmentScoreList <- as.integer(tstrsplit(output.samTable$'12', ':', fixed=TRUE)[[3]])
+  
+  ## Save alignment scores to their own columns
+  cat('\n\tSetting alignment scores.')
+  output.samTable[,alignment_score := alignmentScoreList]
+  
+  ## Use the reference name conversion list to apply common gene names
+  output.samTable$locus <- unlist(lapply(output.samTable$reference_name, function(x){ referenceKeyList[[ as.character(x) ]] }))
+  
+  ## Pull out an index of reads that aligned to C4
+  C4ReadsPosVect <- grep('C4',output.samTable$locus,fixed=T)
+  
+  ## Initialize a column of the data table for storing whether the read aligned to C4 or not
+  output.samTable$isC4 <- F
+  output.samTable$isC4[C4ReadsPosVect] <- T ## Set the C4 bool to T for all C4 indexed reads
   
   return(output.samTable)
 }

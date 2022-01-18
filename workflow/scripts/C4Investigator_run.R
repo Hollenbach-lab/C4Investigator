@@ -55,6 +55,7 @@ sampleList <- list(sample(name=assert_not_null(snakemake@params[["samplename"]])
                           fastq2path=inputf2,
                           gzip=TRUE,
                           failed=FALSE))
+
 names(sampleList) <- snakemake@params[["samplename"]]
 
 c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, maxReadThreshold, minDP ){
@@ -96,7 +97,9 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
   
   ## Build up deletion index lists, which are needed for converting read coordinates between Along and Bshort
   inverseDeletionIndexList <- build.c4_inverse_deletion_index_list(c4AlleleDF)
+  inverseDeletionIndexList[['C4ins']] <- 1:2860
   deletionIndexList <- build.c4_deletion_index_list(c4AlleleDF)
+  deletionIndexList[['C4ins']] <- 2861:9228
   
   #### These sets of functions use the deletion index lists to convert read alignment coordinates to a common coordinate
   ## This function sets the universal read start position
@@ -178,48 +181,49 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     
     # /s -----------------------------------------------------------
     
+    
+    
     ## Count how many header lines there in the SAM file so they can be skipped during read in
     headerLineCountInt <- samfile.count_header_lines(currentSample)
     
     ## Read in the SAM file as a data table
     samTable <- samfile.read_whole_genome_sam(currentSample$samPath, headerLineCountInt)
     
-    file.remove(currentSample$samPath) ## Remove the SAM file to save space
-    file.remove(currentSample$mhcSamPath) ## Remove the SAM file to save space
+    #file.remove(currentSample$samPath) ## Remove the SAM file to save space
+    #file.remove(currentSample$mhcSamPath) ## Remove the SAM file to save space
+    
+    
     
     ## Count CFF matches
-    c4.mutCountList <- c4.count_cff_matches(currentSample, c4.probeDF, samTable)
-    cffCountDF[currentSample$name,names(c4.mutCountList)] <- c4.mutCountList
-    write.csv(cffCountDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_cffCount.csv')))
+    #c4.mutCountList <- c4.count_cff_matches(currentSample, c4.probeDF, samTable)
+    #cffCountDF[currentSample$name,names(c4.mutCountList)] <- c4.mutCountList
+    #write.csv(cffCountDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_cffCount.csv')))
     
-    ## Convert the alignment scores into integers
-    alignmentScoreList <- as.integer(tstrsplit(samTable$'12', ':', fixed=TRUE)[[3]])
+
     
-    ## Save alignment scores to their own columns
-    cat('\nSetting alignment scores.')
-    samTable[,alignment_score := alignmentScoreList]
-    
-    samTable$reference_name <- tstrsplit(samTable$reference_name, '_')[[3]]
+    #samTable$reference_name <- tstrsplit(samTable$reference_name, '_')[[3]]
     
     ## Use the reference name conversion list to apply common gene names
-    samTable$locus <- unlist(lapply(samTable$reference_name, function(x){referenceKeyList[[x]]}))
+    #samTable$locus <- unlist(lapply(samTable$reference_name, function(x){referenceKeyList[[x]]}))
     
     ## Pull out an index of reads that aligned to C4
-    C4ReadsPosVect <- grep('C4',samTable$locus,fixed=T)
+    #C4ReadsPosVect <- grep('C4',samTable$locus,fixed=T)
     
     ## Initialize a column of the data table for storing whether the read aligned to C4 or not
-    samTable$isC4 <- F
-    samTable$isC4[C4ReadsPosVect] <- T ## Set the C4 bool to T for all C4 indexed reads
+    #samTable$isC4 <- F
+    #samTable$isC4[C4ReadsPosVect] <- T ## Set the C4 bool to T for all C4 indexed reads
     
     ## Pull out the subset of C4 aligned reads as its own data table
     c4SamTable <- samTable[isC4 == T][locus %in% c('C4A','C4B')]
+    c4SamTable <- samTable[isC4 == T]
+    
+    ## Intialize and set a column for read lengths
+    c4SamTable$readLen <- nchar(c4SamTable$read_seq)
+    #c4SamTable[reference_name== 'hg38_knownGene_C4INSREG', ref_pos := ref_pos + 2860]
     
     if( nrow(c4SamTable) < 1000 ){
       next
     }
-    
-    ## Intialize and set a column for read lengths
-    c4SamTable$readLen <- nchar(c4SamTable$read_seq)
     
     ## Set the startPos and endPos for all reads
     c4SamTable[,startPos := mapply(run.setStartPos, locus, ref_pos)]
@@ -232,104 +236,18 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     ## Convert the SAM flags for all of the C4 aligned reads into an easily interpretable table
     bigSamFlagTable <- sapply(c4SamTable$sam_flag,samtable.flag_convert)
     
-    ## Isolate all first-in-pair reads (reads that aligned as the first half of a paired-end read pair)
-    firstC4SamTable <- c4SamTable[unlist(bigSamFlagTable['firstInPair',])]
-    ## Isolate all second-in-pair reads
-    secondC4SamTable <- c4SamTable[unlist(bigSamFlagTable['secondInPair',])]
+    c4SamTable <- c4SamTable[!unlist(bigSamFlagTable['notPrimaryAlignment',])]
     
-    ## Sort the paired-end sam tables by ascending read names and descending alignment scores
-    firstC4SamTable <- firstC4SamTable[order(read_name, -alignment_score)]
-    secondC4SamTable <- secondC4SamTable[order(read_name, -alignment_score)]
+    cat('\n\t\tConverting C4 aligned reads to read tables')
+    c4SamTable[, 'readTable' := alleleSetup.read_formatter( read_name, read_seq, ref_pos, locus, cigar_string), by=seq_len(nrow(c4SamTable)) ]
+    cat('\n\t\tDONE')
     
-    ## Keep the alignments with the max score for each read
-    secondC4SamTable <- secondC4SamTable[secondC4SamTable[,alignment_score == max(alignment_score),by=.(read_name)]$V1]
-    firstC4SamTable <- firstC4SamTable[firstC4SamTable[,alignment_score == max(alignment_score),by=.(read_name)]$V1]
+    c4BuildDF <- c4.samDT_to_depthDF(c4SamTable, resultsDirectory, currentSample$name, c4AlleleDF)
     
-    ## Remove duplicate read alignments
-    firstC4SamTable <- unique(firstC4SamTable, by=c('read_name'))
-    secondC4SamTable <- unique(secondC4SamTable, by=c('read_name'))
+    ins.coordVect <- which(c4BuildDF['INS',] > 0)
+    del.coordVect <- setdiff( which(c4BuildDF['.',] > 0), inverseDeletionIndexList$C4B )
     
-    ## Remove reads with 'N' characters
-    firstC4SamTable <- firstC4SamTable[grep('N',firstC4SamTable$read_seq,fixed=T,invert=T)]
-    secondC4SamTable <- secondC4SamTable[grep('N',secondC4SamTable$read_seq,fixed=T,invert=T)]
-    
-    
-    ## Identification of INSERTIONS
-    first.exonINS.list <- c4.exon_ins_pos_list(firstC4SamTable, c4.exonCoordVect)
-    second.exonINS.list <- c4.exon_ins_pos_list(secondC4SamTable, c4.exonCoordVect)
-    total.exonINS.list <- c( first.exonINS.list, second.exonINS.list )
-    c4.record_exon_ins(total.exonINS.list, resultsDirectory, currentSample$name, indel.path)
-    
-    
-    
-    currentDelIndex <<- inverseDeletionIndexList
-    
-    cat('\nFormatting paired C4 aligned reads.')
-    ## Apply the read_formatter function to the overlapping reads (creates a named vector of the read, adds in deletion positions)
-    firstC4SamTable[,read_table:=mapply(c4.read_formatter, read_name, read_seq, startPos, endPos, locus, cigar_string) ]
-    secondC4SamTable[,read_table:=mapply(c4.read_formatter, read_name, read_seq, startPos, endPos, locus, cigar_string) ]
-    
-    ## Initialize a dataframe for storing the read information
-    c4BuildDF <- build.c4_nuc_frame(c4AlleleDF)
-    
-    maxCol <- as.integer( colnames(c4BuildDF)[ncol(c4BuildDF)] )
-    
-    toRemove.index <- which( sapply(firstC4SamTable$read_table, function(x) max(as.integer(names(x))) > maxCol) )
-    if(length(toRemove.index) > 0){
-      firstC4SamTable <- firstC4SamTable[!toRemove.index,]
-    }
-    
-    toRemove.index <- which( sapply(secondC4SamTable$read_table, function(x) max(as.integer(names(x))) > maxCol) )
-    if(length(toRemove.index) > 0){
-      secondC4SamTable <- secondC4SamTable[!toRemove.index,]
-    }
-    
-    cat('\nBuilding C4 alignments.')
-    
-    for(currentTable in firstC4SamTable$read_table){
-      ## Convert the nucleotide table into an integer table (nucListConv is in gc_functions.R)
-      currentTableConverted <- lapply(currentTable, function(x) nucListConv[[x]])
-      
-      ## Fill in the build for the current locus using the converted table
-      for(nucInt in unique(unlist(currentTableConverted))){
-        coordsMatchingNucInt <- names(currentTableConverted[currentTableConverted == nucInt])
-        c4BuildDF[as.character(nucInt),coordsMatchingNucInt] <- c4BuildDF[as.character(nucInt),coordsMatchingNucInt] + 1
-      }
-    }
-    
-    for(currentTable in secondC4SamTable$read_table){
-      ## Convert the nucleotide table into an integer table (nucListConv is in gc_functions.R)
-      currentTableConverted <- lapply(currentTable, function(x) nucListConv[[x]])
-      
-      ## Fill in the build for the current locus using the converted table
-      for(nucInt in unique(unlist(currentTableConverted))){
-        coordsMatchingNucInt <- names(currentTableConverted[currentTableConverted == nucInt])
-        c4BuildDF[as.character(nucInt),coordsMatchingNucInt] <- c4BuildDF[as.character(nucInt),coordsMatchingNucInt] + 1
-      }
-    }
-    
-    ## DEL identification and recording
-    c4ExonDelIndex <- which( c4BuildDF[5,c4.exonCoordVect] > minDP )
-    
-    c4.delPosVect <- c(0)
-    if( length(c4ExonDelIndex) > 0 ){
-      c4.delPosVect <- c4.exonCoordVect[c4ExonDelIndex]
-    }
-    
-    exonDEL.index <- which( c4BuildDF[5,c4.exonCoordVect] > 0 )
-    if( length(exonDEL.index) > 0 ){
-      exonDELpos.vect <- c4.exonCoordVect[exonDEL.index]
-      exonDELdp.vect <- c4BuildDF[5,exonDELpos.vect]
-      
-      lapply(1:length(exonDELpos.vect), function(x){
-        delPos <- exonDELpos.vect[x]
-        delDP <- exonDELdp.vect[x]
-        textStr <- paste0(currentSample$name,'\t',delPos,'\t',delDP,'\tDEL\n')
-        cat(textStr, file=indel.path, append=T)
-      })
-    }
-    
-    importantRegions.cols <- c(14260, 14263, 14271, 14274, 14276, 14716, 14721, 14730, 14731, 15023, 15024)
+    #importantRegions.cols <- c(14260, 14263, 14271, 14274, 14276, 14716, 14721, 14730, 14731, 15023, 15024)
     ## Phasing
     #nonINS.coord.vect <- setdiff( colnames(c4BuildDF), 2862:9226 )
     #hetCols <- which( apply( c4BuildDF >= minDP, 2, function(x) sum(x) > 1 ) )
@@ -343,14 +261,14 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     #  }
     #}
     
-    hetPos.phasedList <- c4.snp_phaser_2(firstC4SamTable, secondC4SamTable, importantRegions.cols)
-    c4.record_phasing(hetPos.phasedList, currentSample$name, phase.path)
+    #hetPos.phasedList <- c4.snp_phaser_2(firstC4SamTable, secondC4SamTable, importantRegions.cols)
+    #c4.record_phasing(hetPos.phasedList, currentSample$name, phase.path)
     
     cat('\nPlotting C4 alignments.')
     #### C4 plotting
     ## Initialize color scheme for plots
-    pal1 <- c("black","purple","green","blue","orange","brown")
-    pal1 <- setNames(pal1, c('total','ANuc','TNuc','GNuc','CNuc','delNuc'))
+    pal1 <- c("black","purple","green","blue","orange","brown","red")
+    pal1 <- setNames(pal1, c('total','ANuc','TNuc','GNuc','CNuc','delNuc','insNuc'))
     
     #c4BuildList[[currentSample$name]] <- c4BuildDF
     
@@ -359,24 +277,28 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     depthVect <- unlist(apply(miniDF,2,sum))
     
     p1 <- plot_ly(colors=pal1) %>%
-      add_trace(x=as.integer(colnames(miniDF)),
+      add_trace(x=as.integer(1:ncol(miniDF)),
                 y=depthVect,
                 mode='markers',type='scatter',name='total',color='total') %>%
-      add_trace(x=as.integer(colnames(miniDF)),
+      add_trace(x=as.integer(1:ncol(miniDF)),
                 y=unlist(miniDF[1,]),
                 mode='markers',type='scatter',name='A_nuc',color='ANuc') %>%
-      add_trace(x=as.integer(colnames(miniDF)),
+      add_trace(x=as.integer(1:ncol(miniDF)),
                 y=unlist(miniDF[2,]),
                 mode='markers',type='scatter',name='T_nuc',color='TNuc') %>%
-      add_trace(x=as.integer(colnames(miniDF)),
+      add_trace(x=as.integer(1:ncol(miniDF)),
                 y=unlist(miniDF[3,]),
                 mode='markers',type='scatter',name='C_nuc',color='CNuc') %>%
-      add_trace(x=as.integer(colnames(miniDF)),
+      add_trace(x=as.integer(1:ncol(miniDF)),
                 y=unlist(miniDF[4,]),
                 mode='markers',type='scatter',name='G_nuc',color='GNuc') %>%
-      add_trace(x=as.integer(colnames(miniDF)),
+      add_trace(x=as.integer(1:ncol(miniDF)),
                 y=unlist(miniDF[5,]),
-                mode='markers',type='scatter',name='del_nuc',color='delNuc')
+                mode='markers',type='scatter',name='del_nuc',color='delNuc') %>%
+      add_trace(x=as.integer(1:ncol(miniDF)),
+                y=unlist(miniDF[6,]),
+                mode='markers',type='scatter',name='ins_nuc',color='insNuc')
+    
     
     #print(p1)
     
@@ -408,28 +330,28 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     medianc4DepthNum <- median(unlist(apply(c4BuildDF[,c(12000:17000)], 2, sum)))
     medianc4DepthNum <- median(unlist(apply(c4BuildDF[,c(17500:20000)], 2, sum)))    
     
-    c4aMean <- mean(c(c4BuildDF[3,'14260'],c4BuildDF[4,'14263'],c4BuildDF[2,'14271'],c4BuildDF[4,'14274'],
-                      c4BuildDF[3,'14276'], c4BuildDF[4,'14716'],c4BuildDF[2,'14721'],c4BuildDF[2,'14730'],c4BuildDF[3,'14731']))
+    c4aMean <- mean(c(c4BuildDF[3,'E26_129'],c4BuildDF[4,'E26_132'],c4BuildDF[2,'E26_140'],c4BuildDF[4,'E26_143'],
+                      c4BuildDF[3,'E26_145'], c4BuildDF[4,'E28_111'],c4BuildDF[2,'E28_116'],c4BuildDF[2,'E28_125'],c4BuildDF[3,'E28_126']))
     
-    c4bMean <- mean(c(c4BuildDF[2,'14260'],c4BuildDF[3,'14263'],c4BuildDF[1,'14271'],c4BuildDF[3,'14274'],
-                      c4BuildDF[2,'14276'], c4BuildDF[3,'14716'],c4BuildDF[3,'14721'],c4BuildDF[4,'14730'],c4BuildDF[4,'14731']))
+    c4bMean <- mean(c(c4BuildDF[2,'E26_129'],c4BuildDF[3,'E26_132'],c4BuildDF[1,'E26_140'],c4BuildDF[3,'E26_143'],
+                      c4BuildDF[2,'E26_145'], c4BuildDF[3,'E28_111'],c4BuildDF[3,'E28_116'],c4BuildDF[4,'E28_125'],c4BuildDF[4,'E28_126']))
     
-    c4aSnpGroup1Mean <- mean(c(c4BuildDF[3,'14260'],c4BuildDF[4,'14263'],c4BuildDF[2,'14271'],c4BuildDF[4,'14274'],
-                               c4BuildDF[3,'14276']))
+    c4aSnpGroup1Mean <- mean(c(c4BuildDF[3,'E26_129'],c4BuildDF[4,'E26_132'],c4BuildDF[2,'E26_140'],c4BuildDF[4,'E26_143'],
+                               c4BuildDF[3,'E26_145']))
     
-    c4aSnpGroup2Mean <- mean(c(c4BuildDF[4,'14716'],c4BuildDF[2,'14721'],c4BuildDF[2,'14730'],c4BuildDF[3,'14731']))
+    c4aSnpGroup2Mean <- mean(c(c4BuildDF[4,'E28_111'],c4BuildDF[2,'E28_116'],c4BuildDF[2,'E28_125'],c4BuildDF[3,'E28_126']))
     
-    c4bSnpGroup1Mean <- mean(c(c4BuildDF[2,'14260'],c4BuildDF[3,'14263'],c4BuildDF[1,'14271'],c4BuildDF[3,'14274'],
-                               c4BuildDF[2,'14276']))
+    c4bSnpGroup1Mean <- mean(c(c4BuildDF[2,'E26_129'],c4BuildDF[3,'E26_132'],c4BuildDF[1,'E26_140'],c4BuildDF[3,'E26_143'],
+                               c4BuildDF[2,'E26_145']))
     
-    c4bSnpGroup2Mean <- mean(c(c4BuildDF[3,'14716'],c4BuildDF[3,'14721'],c4BuildDF[4,'14730'],c4BuildDF[4,'14731']))
+    c4bSnpGroup2Mean <- mean(c(c4BuildDF[3,'E28_111'],c4BuildDF[3,'E28_116'],c4BuildDF[4,'E28_125'],c4BuildDF[4,'E28_126']))
     
-    c4aLongSnp <- c4BuildDF[4,'6873']
+    c4aLongSnp <- c4BuildDF[4,'I9_4288']
     
-    c4bLongSnp <- c4BuildDF[1,'6873']
+    c4bLongSnp <- c4BuildDF[1,'I9_4288']
     
-    c4E29INS <- c4BuildDF[4,'15028']
-    c4E29NORM <- c4BuildDF[3,'15028']
+    c4E29INS <- c4BuildDF[6,'E29_16']
+    c4E29NORM <- c4BuildDF[4,'E29_16']
     
     #calculating median depth of deletion positions over the insertion region
     deletionDepth <- median(c(as.numeric(c4BuildDF[5,as.character(2861:9227)])))
@@ -450,7 +372,7 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     write.csv(c4BuildDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_dp.csv')))                                  
     write.csv(resultsDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_depth.csv')))
     file.remove(currentSample[['mhcBamPath']])
-    file.remove(currentSample[['bamPath']])
+    #file.remove(currentSample[['bamPath']])
     file.remove(currentSample[['sortedBamPath']])
     file.remove(currentSample[['allDepthPath']])
   }

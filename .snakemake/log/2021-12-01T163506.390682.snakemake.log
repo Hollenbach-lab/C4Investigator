@@ -1,0 +1,11 @@
+Full Traceback (most recent call last):
+  File "/home/wmarin/miniconda3/envs/snakemake/lib/python3.10/site-packages/snakemake/__init__.py", line 593, in snakemake
+    workflow.include(
+  File "/home/wmarin/miniconda3/envs/snakemake/lib/python3.10/site-packages/snakemake/workflow.py", line 1186, in include
+    exec(compile(code, snakefile.get_path_or_uri(), "exec"), self.globals)
+  File "/home/wmarin/C4Investigator/C4Investigator/workflow/snakefile", line 8, in <module>
+    #all_example_samples, = snakemake.io.glob_wildcards("../input/test_sequence/fastq/{sample}_MHC_1.fastq.gz") # get all the test sequence samples
+  File "/home/wmarin/C4Investigator/C4Investigator/workflow/rules/retrieve_1kg.smk", line 13, in get_tgp_urls
+    with open('../data/tgp_30x.tsv') as csvfile:
+FileNotFoundError: [Errno 2] No such file or directory: '../data/tgp_30x.tsv'
+

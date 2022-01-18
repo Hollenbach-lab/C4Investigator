@@ -1,3 +1,79 @@
+c4.generate_feature_list <- function( ref.fa ){
+  if( !file.exists(ref.fa) ){
+    stop(paste('reference file does not exist here:',ref.fa))
+  }
+  ref.dt <- fread(file=ref.fa,header=F)
+  ref.seq <- ref.dt[2,][[1]]
+  
+  if( nchar(ref.seq) != 21058 ){
+    stop(paste('reference sequence is not expected length'))
+  }
+  
+  ref.seq.vect <- strsplit(ref.seq,'')[[1]]
+  exonCoord.index <- which( ref.seq.vect == toupper(ref.seq.vect) )
+  
+  boundary.vect <- which( diff(exonCoord.index) > 1 )
+  
+  initial.pos <- 285
+  exon.number <- 1
+  intron.number <- 0
+  geneFeature.list <- list()
+  for( boundary in boundary.vect ){
+    end.pos <- exonCoord.index[boundary]
+    
+    ref.seq.vect[(initial.pos-1):(end.pos+1)]
+    
+    feat.index <- initial.pos:end.pos
+    
+    if(intron.number == 0){
+      geneFeature.list[['5UTR']] <- paste0('5UTR_',1:(initial.pos-1))
+      geneFeature.list[[paste0('E',exon.number)]] <- paste0('E',exon.number,'_',1:length( feat.index ))
+    }else{
+      geneFeature.list[[paste0('I',intron.number)]] <- paste0('I',intron.number,'_', 1:length( (length(unlist(geneFeature.list))+1):(initial.pos-1) ))
+      geneFeature.list[[paste0('E',exon.number)]] <- paste0('E',exon.number,'_',1:(length( feat.index )))
+    }
+    
+    if( boundary == boundary.vect[length(boundary.vect)] ){
+      geneFeature.list[['I40']] <- paste0('I40_',1:length((feat.index[length(feat.index)]+1):(exonCoord.index[(boundary+1)]-1)))
+      geneFeature.list[['E41']] <- paste0('E41_',1:length( exonCoord.index[(boundary+1)]:20717 ))
+      geneFeature.list[['3UTR']] <- paste0('3UTR_',1:length(20718:(length(ref.seq.vect))))
+    }
+    
+    exon.number <- exon.number + 1
+    intron.number <- intron.number + 1
+    initial.pos <- exonCoord.index[boundary+1]
+  }
+  
+  geneFeature.vect <- unlist(geneFeature.list)
+  
+  #ref.seq.vect[ grep('5UTR_',geneFeature.vect,fixed=T) ]
+  #ref.seq.vect[ grep('E1_',geneFeature.vect,fixed=T) ]
+  #ref.seq.vect[ grep('I1_',geneFeature.vect,fixed=T) ]
+  #ref.seq.vect[ grep('E2_',geneFeature.vect,fixed=T) ]
+  
+  exonErrors <- which( ref.seq.vect[ grep('E',geneFeature.vect) ] != toupper(ref.seq.vect[ grep('E',geneFeature.vect) ]) )
+  intronErrors <- which( ref.seq.vect[ grep('I',geneFeature.vect) ] != tolower(ref.seq.vect[ grep('I',geneFeature.vect) ]) )
+  
+  if(length(exonErrors) > 0 ){
+    stop('non exonic positions in exon index')
+  }
+  
+  if(length(intronErrors) > 0 ){
+    stop('non intronic positions in intron index')
+  }
+  
+  if(length(unlist(geneFeature.list)) != 21058 ){
+    stop('gene feature list is not expected length')
+  }
+  
+  return( geneFeature.list )
+}
+c4.feature.list <- c4.generate_feature_list('resources/c4only_onelines_oneDel_bShort.fasta')
+c4.feature.vect <- 1:length(unlist(c4.feature.list))
+names(c4.feature.vect) <- unlist(c4.feature.list)
+ins.feature.vect <- c4.feature.vect[2860:9230]
+
+important.hetPos.vect <- c("E25_64","E26_55","E26_129","E26_132","E26_140","E26_143","E26_145","E28_23","E28_111","E28_116","E28_125","E28_126","I28_14","I28_19")
 
 
 ## This function runs a bowtie2 alignment looking for exact matches to all KIR references in subsetKirReference
@@ -73,6 +149,7 @@ bowtie2.mhc.c4_alignment <- function(bowtie2_command, reference_index, threads, 
   
   return(current_sample)
 }
+
 ## This function returns a list of dataframes of allele sequences found in the reference fasta
 read.c4_dataframe_from_reference_fasta <- function(fasta_path, referenceKeyList){
   
@@ -87,8 +164,8 @@ read.c4_dataframe_from_reference_fasta <- function(fasta_path, referenceKeyList)
     alleleNameBool <- grepl('>',currentLine,fixed=T)
     
     if(alleleNameBool){
-      alleleName <- strsplit(currentLine, '_',fixed=TRUE)[[1]][3]
-      alleleName <- strsplit(alleleName,' ',fixed=T)[[1]][1]
+      alleleName <- strsplit(currentLine, ' ',fixed=TRUE)[[1]][1]
+      alleleName <- gsub('>','',alleleName,fixed = T)
       alleleName <- referenceKeyList[[alleleName]]
     }else{
       alleleSeq <- currentLine
@@ -822,4 +899,346 @@ c4.record_exon_ins <- function( total.exonINS.list, resultsDirectory, sampleID, 
       cat(textStr, file=indelPath, append=TRUE)
     }
   }
+}
+
+## Format reads for snp phasing (fill in deletion positions with '.')
+alleleSetup.read_formatter <- function( readName, currentSeq, refPos, currentLocus, cigarStr ){
+  
+  #cat('\n',readName,currentLocus,currentRef)
+  cigarMod.del.bool <- grepl('D', cigarStr)
+  cigarMod.ins.bool <- grepl('I', cigarStr)
+  
+  if( cigarMod.del.bool | cigarMod.ins.bool ){
+    resultList <- samFormat.processCigarStr( cigarStr, currentSeq )
+    currentSeq <- resultList$readSeq
+    insIndex <- resultList$insIndex
+  }
+  
+  currentDelIndex <- inverseDeletionIndexList[[currentLocus]]
+  
+  #cat('',length(currentDelIndex))
+  
+  seqLength <- nchar(currentSeq)
+  delBool <- length(currentDelIndex) > 0
+  
+  delRegionIndexVect <- which( diff( currentDelIndex ) > 1 )
+  
+  startPos <- alleleSetup.del_start_offset( refPos, currentDelIndex, delRegionIndexVect )
+  #cat('','passed startPos')
+  ## Format the start position
+  #startPos <- as.numeric(refPos)
+  
+  ## Format the end position
+  endDelIndex <- currentDelIndex[ currentDelIndex > startPos ]
+  delRegionIndexVect <- which( diff( endDelIndex ) > 1 )
+  endPos <- startPos + alleleSetup.del_end_offset( startPos, seqLength, endDelIndex, delRegionIndexVect ) - 1
+  
+  ## Testing if there deletions found in the reference for the current read
+  if( (endPos-startPos + 1) > seqLength ){
+    
+    delIndexList <- which(startPos:endPos %in% currentDelIndex)
+    
+    ## If the index list is empty, something went wrong
+    if(length(delIndexList) == 0){
+      stop('Something weird happened with the deletion index.')
+    }
+    
+    ## Split apart the read sequence and add in deletion symbols
+    for(delIndex in delIndexList){
+      seqLength <- nchar(currentSeq)
+      preString <- substr(currentSeq, 1, delIndex-1)
+      postString <- substr(currentSeq, delIndex, seqLength)
+      
+      currentSeq <- paste0(preString, '.', postString)
+    }
+  }
+  
+  ## Create a full index that cooresponds to the sequence nucleotides and where they go
+  fullIndex <- startPos:endPos
+  
+  ## Turn the sequence string into a list
+  seqList <- strsplit(currentSeq,'')[[1]]
+  
+  if(length(seqList) != length(fullIndex)){
+    cat('\n',startPos,endPos,locus,length(seqList),length(fullIndex))
+  }
+  
+  names(seqList) <- fullIndex
+  
+  if( cigarMod.ins.bool ){
+    for( insPos in names( insIndex ) ){
+      insPosInt <- as.integer(insPos)
+      #cat('\n',readName)
+      # Mod to assign insertion sequence over subsequet del characters
+      if( seqList[ (as.integer(insPos)+1) ] == '.' ){
+        
+        insSeqVect <- strsplit( insIndex[[insPos]], '')[[1]]
+        insSeqVect <- insSeqVect[2:length(insSeqVect)]
+        insSeqPosVect <- (insPosInt+1):(length(insSeqVect)+insPosInt)
+        
+        readDelIndex <- which( seqList == '.' )
+        
+        assign.index <- insSeqPosVect %in% readDelIndex
+        
+        if( any(assign.index) ){
+          seqList[ insSeqPosVect[ assign.index ] ] <- insSeqVect[ assign.index ]
+        }
+        
+        # If there is leftover insertion sequence, append it to the last assigned ins character
+        if( any(!assign.index) ){
+          lastInsPos <- insSeqPosVect[ assign.index ][ sum( assign.index ) ]
+          seqList[ lastInsPos ] <- paste0( c(seqList[ lastInsPos ], insSeqVect[ !assign.index ]), collapse='')
+        }
+      }else{
+        seqList[ insPosInt ] <- insIndex[[insPos]]
+      }
+    }
+  }
+  
+  seqListList <- list( list(seqList) )
+  return(seqListList)
+}
+
+cigarOperationVect <- c('M','I','D')
+samFormat.processCigarStr <- function( cigarStr, readSeq ){
+  # INDEL handling
+  # deletions - add . character to read for deletion positions marked in CIGAR string
+  # insertions - remove insertion characters from read, send read through the indexed vector formatting step, 
+  #              then replace the insertion position with the insertion string ( will need to add the current
+  #              read del index to correctly place )
+  # reads with both - should work following the above steps
+  
+  ## Split the cigar string up into a vector
+  cigarVect <- strsplit(cigarStr,'')[[1]]
+  
+  ## Determine which position of the vector denote cigar operators
+  operationPosVect <- which(cigarVect %in% cigarOperationVect)
+  
+  ## Initialize a list for storing the different operations and their positions
+  operationList <- list()
+  prevPos <- 1
+  countInt <- 1
+  
+  ## Convert the cigar vect into the operation list
+  for(operationPos in operationPosVect){
+    operationList[[countInt]] <- cigarVect[prevPos:operationPos]
+    prevPos <- operationPos+1
+    countInt <- countInt+1
+  }
+  
+  ## Initialize a start position for CIGAR operations
+  prevPos <- 1
+  outStr <- ''
+  out.insIndex <- list()
+  
+  #operationVect <- operationList[[6]]
+  for(operationVect in operationList){
+    
+    ## Pull out the end position of the current operation
+    operationEndPos <- as.integer(paste0(operationVect[1:(length(operationVect)-1)], collapse='')) + prevPos - 1
+    
+    ## Pull out the operation type
+    operationTypeChar <- operationVect[length(operationVect)]
+    
+    if(operationTypeChar == 'M'){
+      prevPos <- operationEndPos + 1
+    }else if(operationTypeChar == 'I'){
+      
+      preString <- substr(readSeq, 1, prevPos-1)
+      insStr <- substr(readSeq, prevPos-1, operationEndPos)
+      postString <- substr(readSeq, operationEndPos+1, nchar(readSeq) )
+      
+      out.insIndex[[as.character( prevPos-1 )]] <- insStr
+      readSeq <- paste0( preString, postString )
+      
+      ## We make no changes to the position variables since the INS seq was removed
+      #operationOffset <- operationOffset + nchar(insStr) - 1
+      
+      #prevPos <- operationEndPos + 1
+    }else if(operationTypeChar == 'D'){
+      
+      seqLength <- nchar(readSeq)
+      preString <- substr(readSeq, 1, prevPos-1)
+      postString <- substr(readSeq, prevPos, seqLength)
+      readSeq <- paste0(c( preString, rep('.', length( prevPos:operationEndPos )), postString), collapse='')
+      
+      prevPos <- operationEndPos + 1
+      
+    }else{
+      stop('samFormat.adjustReadSeq something weird happened for ',readSeq)
+    }
+    
+  }
+  
+  return(list('readSeq'=readSeq,'insIndex'=out.insIndex))
+}
+
+
+alleleSetup.del_start_offset <- function( refPos, currentDelIndex, delRegionIndexVect ){
+  #cat('\n',refPos,'',length(currentDelIndex))
+  
+  if(length( delRegionIndexVect ) == 0 ){
+    delRegionIndexVect <- length(currentDelIndex)
+  }
+  
+  if(length(currentDelIndex) == 0){
+    return(refPos)
+  }else{
+    
+    #oldRefPos <- refPos
+    delOffsetBool <- any( refPos >= currentDelIndex[1:delRegionIndexVect[1]] )
+    #delOffset <- length(currentDelIndex)
+    
+    if( !delOffsetBool ){
+      return(refPos)
+    }
+    
+    delOffset <- length(currentDelIndex[1:delRegionIndexVect[1]])
+    refPos <- refPos + delOffset
+    
+    if(length( currentDelIndex ) > delOffset ){
+      currentDelIndex <- currentDelIndex[ (delOffset+1):length(currentDelIndex) ]
+      delRegionIndexVect <- delRegionIndexVect - delOffset
+      return( alleleSetup.del_start_offset( refPos, currentDelIndex, delRegionIndexVect[-1]) )
+    }else{
+      return(refPos)
+    }
+    
+  }
+  
+}
+
+alleleSetup.del_end_offset <- function( startPos, seqLength, endDelIndex, delRegionIndexVect ){
+  #cat('\n',startPos,'',seqLength,'',length(endDelIndex))
+  endPos <- startPos + seqLength
+  
+  if(length( delRegionIndexVect ) == 0 ){
+    delRegionIndexVect <- length(endDelIndex)
+  }
+  
+  if(length(endDelIndex) == 0){
+    return( seqLength )
+  }else{
+    
+    delOffsetBool <- any( endPos >= endDelIndex )
+    
+    if( !delOffsetBool ){
+      return( seqLength )
+    }
+    
+    delOffset <- length( endDelIndex[1:delRegionIndexVect[1]] )
+    
+    seqLength <- seqLength + delOffset
+    
+    if( length(endDelIndex) > delOffset ){
+      endDelIndex <- endDelIndex[ (delOffset+1):length(endDelIndex) ]
+      delRegionIndexVect <- delRegionIndexVect - delOffset
+      return( alleleSetup.del_end_offset( startPos, seqLength, endDelIndex, delRegionIndexVect[-1] ) )
+    }else{
+      return( seqLength )
+    }
+  }
+}
+
+c4.process_bamFile_to_samDT <- function( currentSmaple.id, rawData.dir ){
+  cat('\n\t-- Processing',currentSample.id,'BAM file --')
+  
+  sample.dir <- list.files(path=file.path(rawData.dir,paste0('home/wmarin/C4Investigator/C4Investigator/output/tgp/')), pattern=currentSample.id,recursive = F,include.dirs = T,full.names = T)[[1]]
+  sample.bam.path <- list.files(path=sample.dir,pattern = '.bam',recursive=T,full.names=T)
+  
+  cat('\n\t\tReading in',sample.bam.path)
+  
+  test.bam <- scanBam(sample.bam.path)
+  currentSample.samDT <- as.data.table(test.bam[[1]])
+  
+  
+  ## Use the reference name conversion list to apply common gene names
+  currentSample.samDT$locus <- unlist(lapply(currentSample.samDT$rname, function(x){ referenceKeyList[[ as.character(x) ]] }))
+  
+  ## Pull out an index of reads that aligned to C4
+  C4ReadsPosVect <- grep('C4',currentSample.samDT$locus,fixed=T)
+  
+  ## Initialize a column of the data table for storing whether the read aligned to C4 or not
+  currentSample.samDT$isC4 <- F
+  currentSample.samDT$isC4[C4ReadsPosVect] <- T ## Set the C4 bool to T for all C4 indexed reads
+  
+  currentSample.samDT$read_seq <- ''
+  currentSample.samDT$read_seq <- sapply(currentSample.samDT$seq, function(x) as.character(x))
+  currentSample.samDT[,seq:=NULL]
+  currentSample.samDT[,qual:=NULL]
+  
+  
+  ## Pull out the subset of C4 aligned reads as its own data table
+  C4.currentSample.samDT <- copy( currentSample.samDT[isC4 == T][locus %in% c('C4A','C4B')] )
+  rm(currentSample.samDT)
+  
+  ## Intialize and set a column for read lengths
+  C4.currentSample.samDT$readLen <- nchar(C4.currentSample.samDT$read_seq)
+  C4.currentSample.samDT[mrnm == 'hg38_knownGene_C4INSREG'][,pos := pos + 2860]
+  
+  cat('\n\t\tConverting alignment positions')
+  ## Set the startPos and endPos for all reads
+  C4.currentSample.samDT[,startPos := mapply(run.setStartPos, locus, pos)]
+  C4.currentSample.samDT[,endPos := mapply(run.setEndPos, locus, pos, readLen)]
+  
+  ## Remove any positions that end up as NA (usually these are from reads that extend beyond the reference)
+  C4.currentSample.samDT <- C4.currentSample.samDT[!is.na(C4.currentSample.samDT$endPos)]
+  C4.currentSample.samDT <- C4.currentSample.samDT[!is.na(C4.currentSample.samDT$startPos)]
+  
+  ## Convert the SAM flags for all of the C4 aligned reads into an easily interpretable table
+  bigSamFlagTable <- sapply(C4.currentSample.samDT$flag,samtable.flag_convert)
+  
+  C4.currentSample.samDT <- C4.currentSample.samDT[!unlist(bigSamFlagTable['notPrimaryAlignment',])]
+  
+  cat('\n\t\tConverting C4 aligned reads to read tables')
+  C4.currentSample.samDT[, 'readTable' := alleleSetup.read_formatter( qname, read_seq, pos, locus, cigar), by=seq_len(nrow(C4.currentSample.samDT)) ]
+  
+  cat('\n\t\tDONE')
+  return( C4.currentSample.samDT )
+}
+
+c4.samDT_to_depthDF <- function(samDT, output.dir, currentSample.id, c4AlleleDF){
+  cat('\n\t-- Combining alignments in',currentSample.id,'samDT to depthDF --')
+  
+  currentDepthDF <- as.data.frame( matrix( data=0,nrow=6,ncol=ncol(c4AlleleDF) ) )
+  samDT <- samDT[ endPos < ncol(currentDepthDF) & startPos > 0 ]
+  cat('\n\t\tProcessing',nrow(samDT),'reads')
+  
+  namedReadVect <- unlist( samDT$readTable )
+  
+  # First process insertions
+  insIndex <- which( nchar( namedReadVect ) != 1 ,useNames = F)
+  if( length(insIndex) > 0){
+    #  cat('','INS')
+    insTab <- table( as.integer(names(insIndex)) )
+    cat('\n\t\tProcessing',length(insTab),'insertion positions')
+    currentDepthDF[ 6, as.integer(names(insTab)) ] <- as.vector( insTab )
+    namedReadVect.noIns <- namedReadVect[ -as.vector(insIndex) ]
+  }else{
+    namedReadVect.noIns <- namedReadVect
+  }
+  remove(namedReadVect)
+  
+  # Then process all other nucleotides and deletion positions
+  uniqueNucVect <- intersect( unique(namedReadVect.noIns), names(nucListConv) )
+  for( nuc in uniqueNucVect ){
+    #cat('',nuc)
+    nucIndex <- which( namedReadVect.noIns == nuc, useNames=F )
+    nucTab <- table( as.integer(names(nucIndex)) )
+    cat('\n\t\tProcessing',length(nucTab),nuc,'positions')
+    currentDepthDF[ nucListConv[[nuc]], as.integer(names(nucTab)) ] <- as.vector( nucTab )
+  }
+  
+  remove(nucIndex)
+  remove(nucTab)
+  remove(namedReadVect.noIns)
+  
+  rownames(currentDepthDF) <- c(names(nucListConv),'INS')
+  colnames(currentDepthDF) <- names( c4.feature.vect )
+  
+  cat('\n\t\tWriting depthDF to file:', file.path(output.dir, paste0('C4_DP_',currentSample.id,'.csv') ))
+  write.csv(currentDepthDF, file.path(output.dir, paste0('C4_DP_',currentSample.id,'.csv')))
+  cat('\n\t\tDONE')
+  
+  return(currentDepthDF)
 }
