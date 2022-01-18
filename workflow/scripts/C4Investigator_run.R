@@ -58,58 +58,21 @@ sampleList <- list(sample(name=assert_not_null(snakemake@params[["samplename"]])
 
 names(sampleList) <- snakemake@params[["samplename"]]
 
+
+
 c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, maxReadThreshold, minDP ){
   
-  resourcesDirectory <- normalizePath('resources/', mustWork=T)
-  mhcResourcesDirectory <- normalizePath('resources/', mustWork=T)
   
   ## Setting up the results directory
   dir.create(resultsDirectory,showWarnings = F) ## This function will output an inconsequential warning if the directory already exists
   resultsDirectory <- normalizePath(resultsDirectory, mustWork = T) ## Make sure the results directory exists
   
-  ## Setting up C4 reference resources
-  referencePath <- file.path(resourcesDirectory,'all_onelines_oneDel_bShort') ## C4 alignment reference
-  mhcReferencePath <- file.path(mhcResourcesDirectory,'mhc')
-  referenceKeyPath <- file.path(resourcesDirectory,'reference_key.txt') ## Key for interpreting sequence names in the reference file
-  alignedC4Path <- file.path(resourcesDirectory,'c4only_onelines_oneDel_bShort.fasta') ## C4Along and C4Bshort alignment reference alleles matched by position
-  alignedC4Path <- normalizePath(alignedC4Path,mustWork=T) ## Making sure the matched reference allele file exists
-  
-  ## Reading in the C4 reference key
-  referenceKeyDF <- read.table(referenceKeyPath, stringsAsFactors = F) ## Read in the file as a table
-  alignedLocusVect <- c(unique(referenceKeyDF[,6]),'C4') ## Pull out the locus names, adding in overall C4
-  
-  ## Build up a conversion list to convert genome locus names to common gene names
-  referenceKeyList <- list() 
-  for(i in 1:nrow(referenceKeyDF)){
-    referenceKeyList[[referenceKeyDF[i,1]]] <- referenceKeyDF[i,6]
-  }
-  
-  ## Read in the aligned C4 fasta (a dataframe for each locus)
-  c4AlleleDF <- read.c4_dataframe_from_reference_fasta(alignedC4Path, referenceKeyList)
-  
-  c4.charList <- c4AlleleDF[1,,drop=T]
-  c4.exonCoordVect <- names(c4.charList)[unlist(lapply(c4.charList, general.identify_uppercase))]
-  
   ## Read in probe CSV
-  c4.probeDF <- read.csv(file=file.path('resources/C4_exon_frame_shift_mut_probes.csv'),check.names=F,
-                         stringsAsFactors = F)
-  row.names(c4.probeDF) <- c4.probeDF$ProbeID
+  #c4.probeDF <- read.csv(file=file.path('resources/C4_exon_frame_shift_mut_probes.csv'),check.names=F,
+  #                       stringsAsFactors = F)
+  #row.names(c4.probeDF) <- c4.probeDF$ProbeID
   
-  ## Build up deletion index lists, which are needed for converting read coordinates between Along and Bshort
-  inverseDeletionIndexList <- build.c4_inverse_deletion_index_list(c4AlleleDF)
-  inverseDeletionIndexList[['C4ins']] <- 1:2860
-  deletionIndexList <- build.c4_deletion_index_list(c4AlleleDF)
-  deletionIndexList[['C4ins']] <- 2861:9228
-  
-  #### These sets of functions use the deletion index lists to convert read alignment coordinates to a common coordinate
-  ## This function sets the universal read start position
-  run.setStartPos <- function(ref_name, ref_pos){
-    return(deletionIndexList[[ref_name]][ref_pos])
-  }
-  ## This function sets the universal read end position
-  run.setEndPos <- function(ref_name, ref_pos, currentReadLen){
-    return(deletionIndexList[[ref_name]][ref_pos+currentReadLen-1])
-  }
+
   
   c4.initialize_indel_file <- function(resultsDirectory){
     path <- file.path( resultsDirectory, 'indel.bySample.txt')
@@ -125,9 +88,9 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     return(path)
   }
   
-  indel.path <- c4.initialize_indel_file(resultsDirectory)
+  #indel.path <- c4.initialize_indel_file(resultsDirectory)
   
-  phase.path <- c4.initialize_phasing_file(resultsDirectory)
+  #phase.path <- c4.initialize_phasing_file(resultsDirectory)
   
   ## Initialize a list for storing C4 alignments
   c4BuildList <- list()
@@ -137,8 +100,8 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
   colnames(resultsDF) <- c('median_c4mid','median_c4del','mean_c4ins','median_tnxb','mean_c4a_g1', 'mean_c4a_g2','mean_c4b_g1', 'mean_c4b_g2',
                            'mean_c4a', 'mean_c4b', 'c4aL', 'c4bL', 'median_mhc_c4', 'median_mhc_tnxb', 'mhc_c4_copy','c4_exon_del','c4_exon29_ins','c4_exon29_norm')
   
-  cffCountDF <- data.frame(matrix(0,nrow=length(sampleList),ncol=nrow(c4.probeDF)), row.names=names(sampleList), stringsAsFactors = F)
-  colnames(cffCountDF) <- rownames( c4.probeDF )
+  #cffCountDF <- data.frame(matrix(0,nrow=length(sampleList),ncol=nrow(c4.probeDF)), row.names=names(sampleList), stringsAsFactors = F)
+  #colnames(cffCountDF) <- rownames( c4.probeDF )
   
   for(currentSample in sampleList){
     currentSample <- bowtie2.c4_alignment(bowtie2, referencePath, threads, currentSample, resultsDirectory)
@@ -187,10 +150,10 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     headerLineCountInt <- samfile.count_header_lines(currentSample)
     
     ## Read in the SAM file as a data table
-    samTable <- samfile.read_whole_genome_sam(currentSample$samPath, headerLineCountInt)
+    samTable <- samfile.read_whole_genome_sam(currentSample$samPath, headerLineCountInt, referenceKeyList)
     
-    #file.remove(currentSample$samPath) ## Remove the SAM file to save space
-    #file.remove(currentSample$mhcSamPath) ## Remove the SAM file to save space
+    file.remove(currentSample$samPath) ## Remove the SAM file to save space
+    file.remove(currentSample$mhcSamPath) ## Remove the SAM file to save space
     
     
     
@@ -214,7 +177,6 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     #samTable$isC4[C4ReadsPosVect] <- T ## Set the C4 bool to T for all C4 indexed reads
     
     ## Pull out the subset of C4 aligned reads as its own data table
-    c4SamTable <- samTable[isC4 == T][locus %in% c('C4A','C4B')]
     c4SamTable <- samTable[isC4 == T]
     
     ## Intialize and set a column for read lengths
@@ -354,22 +316,22 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     c4E29NORM <- c4BuildDF[4,'E29_16']
     
     #calculating median depth of deletion positions over the insertion region
-    deletionDepth <- median(c(as.numeric(c4BuildDF[5,as.character(2861:9227)])))
+    deletionDepth <- median(c(as.numeric(c4BuildDF[5,2861:9227])))
     
     #calculating median depth of the insertion region
-    nonDeletionDepth <- mean( apply( c4BuildDF[1:4,as.character(2861:9227)], 2, sum) )
+    nonDeletionDepth <- mean( apply( c4BuildDF[1:4,2861:9227], 2, sum) )
     
     wgsC4Copy <- (medianc4DepthNum/TNXBMedian)*2
     resultsDF[currentSample$name,c('median_mhc_c4', 'median_mhc_tnxb', 'wgs_c4_copy')] <- c(c4Median, TNXBMedian, wgsC4Copy)
     
-    resultsDF[currentSample$name,'c4_exon_del'] <- paste0( c4.delPosVect, collapse='.' )
+    #resultsDF[currentSample$name,'c4_exon_del'] <- paste0( c4.delPosVect, collapse='.' )
     resultsDF[currentSample$name,c('c4_exon29_ins','c4_exon29_norm')] <- c(c4E29INS,c4E29NORM)
     
     resultsDF[currentSample$name,c('median_c4mid','median_c4del','mean_c4ins','median_tnxb','mean_c4a_g1', 'mean_c4a_g2','mean_c4b_g1', 'mean_c4b_g2',
                                    'mean_c4a', 'mean_c4b', 'c4aL', 'c4bL')] <- c(medianc4DepthNum, deletionDepth, nonDeletionDepth, medianTnxbDepthNum,
                                                                                  c4aSnpGroup1Mean, c4aSnpGroup2Mean, c4bSnpGroup1Mean, c4bSnpGroup2Mean, c4aMean, c4bMean, c4aLongSnp, c4bLongSnp)
     
-    write.csv(c4BuildDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_dp.csv')))                                  
+    #write.csv(c4BuildDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_dp.csv')))                                  
     write.csv(resultsDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_depth.csv')))
     file.remove(currentSample[['mhcBamPath']])
     #file.remove(currentSample[['bamPath']])

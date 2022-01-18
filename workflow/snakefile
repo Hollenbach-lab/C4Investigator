@@ -4,7 +4,7 @@ include: "rules/c4investigator.smk"
 
 
 all_tgp_samples=get_tgp_urls().keys() # get all the 1000 genome samples
-some_tgp_samples = list(all_tgp_samples)[1000:2502] # get the first 5 1000 genome samples
+some_tgp_samples = list(all_tgp_samples) # get the first 5 1000 genome samples
 #all_example_samples, = snakemake.io.glob_wildcards("../input/test_sequence/fastq/{sample}_MHC_1.fastq.gz") # get all the test sequence samples
 #all_data_samples,  = snakemake.io.glob_wildcards("../input/data/bam/{sample}.bam") # get all the samples in the data directory
 

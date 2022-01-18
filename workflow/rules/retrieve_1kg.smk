@@ -10,7 +10,7 @@ def make_s3(path):
 
 @lru_cache(None)
 def get_tgp_urls():
-    with open('../data/tgp_30x.tsv') as csvfile:
+    with open('../data/tgp_full_30x.tsv') as csvfile:
         csvr = csv.reader(csvfile,delimiter='\t')
         return {x[0]:make_s3(x[1]) for x in csvr}
 

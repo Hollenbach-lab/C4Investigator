@@ -1,78 +1,3 @@
-c4.generate_feature_list <- function( ref.fa ){
-  if( !file.exists(ref.fa) ){
-    stop(paste('reference file does not exist here:',ref.fa))
-  }
-  ref.dt <- fread(file=ref.fa,header=F)
-  ref.seq <- ref.dt[2,][[1]]
-  
-  if( nchar(ref.seq) != 21058 ){
-    stop(paste('reference sequence is not expected length'))
-  }
-  
-  ref.seq.vect <- strsplit(ref.seq,'')[[1]]
-  exonCoord.index <- which( ref.seq.vect == toupper(ref.seq.vect) )
-  
-  boundary.vect <- which( diff(exonCoord.index) > 1 )
-  
-  initial.pos <- 285
-  exon.number <- 1
-  intron.number <- 0
-  geneFeature.list <- list()
-  for( boundary in boundary.vect ){
-    end.pos <- exonCoord.index[boundary]
-    
-    ref.seq.vect[(initial.pos-1):(end.pos+1)]
-    
-    feat.index <- initial.pos:end.pos
-    
-    if(intron.number == 0){
-      geneFeature.list[['5UTR']] <- paste0('5UTR_',1:(initial.pos-1))
-      geneFeature.list[[paste0('E',exon.number)]] <- paste0('E',exon.number,'_',1:length( feat.index ))
-    }else{
-      geneFeature.list[[paste0('I',intron.number)]] <- paste0('I',intron.number,'_', 1:length( (length(unlist(geneFeature.list))+1):(initial.pos-1) ))
-      geneFeature.list[[paste0('E',exon.number)]] <- paste0('E',exon.number,'_',1:(length( feat.index )))
-    }
-    
-    if( boundary == boundary.vect[length(boundary.vect)] ){
-      geneFeature.list[['I40']] <- paste0('I40_',1:length((feat.index[length(feat.index)]+1):(exonCoord.index[(boundary+1)]-1)))
-      geneFeature.list[['E41']] <- paste0('E41_',1:length( exonCoord.index[(boundary+1)]:20717 ))
-      geneFeature.list[['3UTR']] <- paste0('3UTR_',1:length(20718:(length(ref.seq.vect))))
-    }
-    
-    exon.number <- exon.number + 1
-    intron.number <- intron.number + 1
-    initial.pos <- exonCoord.index[boundary+1]
-  }
-  
-  geneFeature.vect <- unlist(geneFeature.list)
-  
-  #ref.seq.vect[ grep('5UTR_',geneFeature.vect,fixed=T) ]
-  #ref.seq.vect[ grep('E1_',geneFeature.vect,fixed=T) ]
-  #ref.seq.vect[ grep('I1_',geneFeature.vect,fixed=T) ]
-  #ref.seq.vect[ grep('E2_',geneFeature.vect,fixed=T) ]
-  
-  exonErrors <- which( ref.seq.vect[ grep('E',geneFeature.vect) ] != toupper(ref.seq.vect[ grep('E',geneFeature.vect) ]) )
-  intronErrors <- which( ref.seq.vect[ grep('I',geneFeature.vect) ] != tolower(ref.seq.vect[ grep('I',geneFeature.vect) ]) )
-  
-  if(length(exonErrors) > 0 ){
-    stop('non exonic positions in exon index')
-  }
-  
-  if(length(intronErrors) > 0 ){
-    stop('non intronic positions in intron index')
-  }
-  
-  if(length(unlist(geneFeature.list)) != 21058 ){
-    stop('gene feature list is not expected length')
-  }
-  
-  return( geneFeature.list )
-}
-c4.feature.list <- c4.generate_feature_list('resources/c4only_onelines_oneDel_bShort.fasta')
-c4.feature.vect <- 1:length(unlist(c4.feature.list))
-names(c4.feature.vect) <- unlist(c4.feature.list)
-ins.feature.vect <- c4.feature.vect[2860:9230]
-
 important.hetPos.vect <- c("E25_64","E26_55","E26_129","E26_132","E26_140","E26_143","E26_145","E28_23","E28_111","E28_116","E28_125","E28_126","I28_14","I28_19")
 
 
@@ -1242,3 +1167,120 @@ c4.samDT_to_depthDF <- function(samDT, output.dir, currentSample.id, c4AlleleDF)
   
   return(currentDepthDF)
 }
+
+resourcesDirectory <- normalizePath('resources/', mustWork=T)
+mhcResourcesDirectory <- normalizePath('resources/', mustWork=T)
+
+## Setting up C4 reference resources
+referencePath <- file.path(resourcesDirectory,'all_onelines_oneDel_bShort') ## C4 alignment reference
+mhcReferencePath <- file.path(mhcResourcesDirectory,'mhc')
+referenceKeyPath <- file.path(resourcesDirectory,'reference_key.txt') ## Key for interpreting sequence names in the reference file
+alignedC4Path <- file.path(resourcesDirectory,'c4only_onelines_oneDel_bShort.fasta') ## C4Along and C4Bshort alignment reference alleles matched by position
+alignedC4Path <- normalizePath(alignedC4Path,mustWork=T) ## Making sure the matched reference allele file exists
+
+## Reading in the C4 reference key
+referenceKeyDF <- read.table(referenceKeyPath, stringsAsFactors = F) ## Read in the file as a table
+alignedLocusVect <- c(unique(referenceKeyDF[,6]),'C4') ## Pull out the locus names, adding in overall C4
+
+## Build up a conversion list to convert genome locus names to common gene names
+referenceKeyList <- list() 
+for(i in 1:nrow(referenceKeyDF)){
+  referenceKeyList[[referenceKeyDF[i,1]]] <- referenceKeyDF[i,6]
+}
+
+## Read in the aligned C4 fasta (a dataframe for each locus)
+c4AlleleDF <- read.c4_dataframe_from_reference_fasta(alignedC4Path, referenceKeyList)
+
+c4.charList <- c4AlleleDF[1,,drop=T]
+c4.exonCoordVect <- names(c4.charList)[unlist(lapply(c4.charList, general.identify_uppercase))]
+
+## Build up deletion index lists, which are needed for converting read coordinates between Along and Bshort
+inverseDeletionIndexList <- build.c4_inverse_deletion_index_list(c4AlleleDF)
+inverseDeletionIndexList[['C4ins']] <- 1:2860
+deletionIndexList <- build.c4_deletion_index_list(c4AlleleDF)
+deletionIndexList[['C4ins']] <- 2861:9228
+
+#### These sets of functions use the deletion index lists to convert read alignment coordinates to a common coordinate
+## This function sets the universal read start position
+run.setStartPos <- function(ref_name, ref_pos){
+  return(deletionIndexList[[ref_name]][ref_pos])
+}
+## This function sets the universal read end position
+run.setEndPos <- function(ref_name, ref_pos, currentReadLen){
+  return(deletionIndexList[[ref_name]][ref_pos+currentReadLen-1])
+}
+
+c4.generate_feature_list <- function( ref.fa ){
+  if( !file.exists(ref.fa) ){
+    stop(paste('reference file does not exist here:',ref.fa))
+  }
+  ref.dt <- fread(file=ref.fa,header=F)
+  ref.seq <- ref.dt[2,][[1]]
+  
+  if( nchar(ref.seq) != 21058 ){
+    stop(paste('reference sequence is not expected length'))
+  }
+  
+  ref.seq.vect <- strsplit(ref.seq,'')[[1]]
+  exonCoord.index <- which( ref.seq.vect == toupper(ref.seq.vect) )
+  
+  boundary.vect <- which( diff(exonCoord.index) > 1 )
+  
+  initial.pos <- 285
+  exon.number <- 1
+  intron.number <- 0
+  geneFeature.list <- list()
+  for( boundary in boundary.vect ){
+    end.pos <- exonCoord.index[boundary]
+    
+    ref.seq.vect[(initial.pos-1):(end.pos+1)]
+    
+    feat.index <- initial.pos:end.pos
+    
+    if(intron.number == 0){
+      geneFeature.list[['5UTR']] <- paste0('5UTR_',1:(initial.pos-1))
+      geneFeature.list[[paste0('E',exon.number)]] <- paste0('E',exon.number,'_',1:length( feat.index ))
+    }else{
+      geneFeature.list[[paste0('I',intron.number)]] <- paste0('I',intron.number,'_', 1:length( (length(unlist(geneFeature.list))+1):(initial.pos-1) ))
+      geneFeature.list[[paste0('E',exon.number)]] <- paste0('E',exon.number,'_',1:(length( feat.index )))
+    }
+    
+    if( boundary == boundary.vect[length(boundary.vect)] ){
+      geneFeature.list[['I40']] <- paste0('I40_',1:length((feat.index[length(feat.index)]+1):(exonCoord.index[(boundary+1)]-1)))
+      geneFeature.list[['E41']] <- paste0('E41_',1:length( exonCoord.index[(boundary+1)]:20717 ))
+      geneFeature.list[['3UTR']] <- paste0('3UTR_',1:length(20718:(length(ref.seq.vect))))
+    }
+    
+    exon.number <- exon.number + 1
+    intron.number <- intron.number + 1
+    initial.pos <- exonCoord.index[boundary+1]
+  }
+  
+  geneFeature.vect <- unlist(geneFeature.list)
+  
+  #ref.seq.vect[ grep('5UTR_',geneFeature.vect,fixed=T) ]
+  #ref.seq.vect[ grep('E1_',geneFeature.vect,fixed=T) ]
+  #ref.seq.vect[ grep('I1_',geneFeature.vect,fixed=T) ]
+  #ref.seq.vect[ grep('E2_',geneFeature.vect,fixed=T) ]
+  
+  exonErrors <- which( ref.seq.vect[ grep('E',geneFeature.vect) ] != toupper(ref.seq.vect[ grep('E',geneFeature.vect) ]) )
+  intronErrors <- which( ref.seq.vect[ grep('I',geneFeature.vect) ] != tolower(ref.seq.vect[ grep('I',geneFeature.vect) ]) )
+  
+  if(length(exonErrors) > 0 ){
+    stop('non exonic positions in exon index')
+  }
+  
+  if(length(intronErrors) > 0 ){
+    stop('non intronic positions in intron index')
+  }
+  
+  if(length(unlist(geneFeature.list)) != 21058 ){
+    stop('gene feature list is not expected length')
+  }
+  
+  return( geneFeature.list )
+}
+c4.feature.list <- c4.generate_feature_list('resources/c4only_onelines_oneDel_bShort.fasta')
+c4.feature.vect <- 1:length(unlist(c4.feature.list))
+names(c4.feature.vect) <- unlist(c4.feature.list)
+ins.feature.vect <- c4.feature.vect[2860:9230]

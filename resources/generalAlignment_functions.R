@@ -360,7 +360,7 @@ samtools.bed_depth <- function(samtools_command, currentSample, resultsDirectory
 }
 
 ## This function reads in a SAM file with header to a data.table (header rows must be skipped)
-samfile.read_whole_genome_sam <- function(sam_path, rows_to_skip=26){
+samfile.read_whole_genome_sam <- function(sam_path, rows_to_skip=26, referenceKeyList){
   cat('\nReading in the SAM file.')
   
   ## Make sure the SAM file can be read in
