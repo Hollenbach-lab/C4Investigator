@@ -1,7 +1,7 @@
-# PING docker
-An R-based bioinformatic pipeline to determine killer-cell immunoglobulin-like receptor (KIR) copy number and genotypes from short-read sequencing data.
+# C4Investigator
+An R-based bioinformatic pipeline to determine complement component 4 (C4) copy number and genotypes from short-read genomic sequencing data.
 
-This branch of PING is setup to be run using snakemake [https://snakemake.readthedocs.io/]
+This branch of C4Investigator is setup to be run using snakemake [https://snakemake.readthedocs.io/]
 
 
 ## Language
@@ -37,13 +37,13 @@ mamba create -c conda-forge -c bioconda -n snakemake snakemake
 
 
 ```shell
-git clone https://github.com/wesleymarin/PING.git --single-branch --branch reborn_docker_copyOnly
+git clone https://github.com/wesleymarin/C4Investigator.git --single-branch --branch master
 ```
 
 ### 4. Run the test example
 
 ```shell
-cd PING/workflow && \
+cd C4Investigator/workflow && \
 conda activate snakemake && \
 snakemake -j 64 --use-conda --verbose --conda-frontend mamba # run snakemake with (up to) 64 threads, using conda for dependency management, and mamba as the conda frontend
 ```
@@ -51,27 +51,27 @@ snakemake -j 64 --use-conda --verbose --conda-frontend mamba # run snakemake wit
 ### 5. Run on any of the 1000 genome samples
 
 ```shell
-cd PING/workflow && \
+cd C4Investigator/workflow && \
 conda activate snakemake && \
 snakemake -j 64 --use-conda --verbose --conda-frontend mamba ../output/tgp/NA12004.tar.gz ../output/tgp/HG04200.tar.gz 
 ```
 
 ### 6. Run on your own data (starting with bam files)
 
-Add all your bam files to the directory (within the `PING` directory) `input/data/bam`. Each file in the directory `input/data/bam` should correspond to a single sample, and have a file name with the pattern `{sample}.bam`, (do not use underscores in the file name).  To run the two samples `foo.bam` and `bar.bam`
+Add all your bam files to the directory (within the `C4Investigator` directory) `input/data/bam`. Each file in the directory `input/data/bam` should correspond to a single sample, and have a file name with the pattern `{sample}.bam`, (do not use underscores in the file name).  To run the two samples `foo.bam` and `bar.bam`
 
 ```shell
 cp /some_other_dir/foo.bar /some_other_dir/bar.bam input/data/bam/ &&\
-cd PING/workflow && \
+cd C4Investigator/workflow && \
 conda activate snakemake && \
 snakemake -j 64 --use-conda --verbose --conda-frontend mamba ../output/data/foo.tar.gz ../output/data/bar.tar.gz 
 ```
 
-snakemake will also automatically run PING for every bam file in the `input/data/bam` directory:
+snakemake will also automatically run C4Investigator for every bam file in the `input/data/bam` directory:
 
 ```shell
 cp /some_other_dir/foo.bar /some_other_dir/bar.bam input/data/bam/ &&\
-cd PING/workflow && \
+cd C4Investigator/workflow && \
 conda activate snakemake && \
 snakemake -j 64 --use-conda --verbose --conda-frontend mamba 
 ```
