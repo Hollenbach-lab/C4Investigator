@@ -47,7 +47,7 @@ sequence.paired_sample_objects <- function(sample_directory, fastq_pattern='fast
   cat("\nAttempting automatic fastq pairing in", sample_directory, "using", fastq_pattern)
   
   ## Find all the files in sampleDirectory that match fastqPattern
-  unpairedFastqList <- list.files(path=sample_directory, pattern=fastq_pattern)
+  unpairedFastqList <- list.files(path=sample_directory, pattern=fastq_pattern,recursive=T)
   
   ## To pair reads, we will split the file names by fastqPattern, then continuously chop a
   ## character off the end of each name until the number of unique names is exactly half of the total names
@@ -119,9 +119,11 @@ sequence.paired_sample_objects <- function(sample_directory, fastq_pattern='fast
   output.sampleList <- list()
   
   for(i in 1:length(pairedFastqList)){
-    
+  
     ## Pulling the current working element out of the list
     pairedFastq <- pairedFastqList[i]
+    
+    fastq_name <- tail(strsplit(names(pairedFastq), '/')[[1]],n=1)
     
     ## Creating an absolute path to the first fastq file
     fastq1path <- normalizePath(file.path(sample_directory, pairedFastq[[1]][1]), mustWork=T)
@@ -139,7 +141,7 @@ sequence.paired_sample_objects <- function(sample_directory, fastq_pattern='fast
     bamPath <- file.path(resultsDirectory,paste0(names(pairedFastq),'.bam'))
     
     ## Building a sample object and adding it to sampleList
-    output.sampleList[[names(pairedFastq)]] <- sample(name=names(pairedFastq),fastq1path=fastq1path,fastq2path=fastq2path,gzip=gzip,samPath=samPath,bamPath=bamPath)
+    output.sampleList[[names(pairedFastq)]] <- sample(name=fastq_name,fastq1path=fastq1path,fastq2path=fastq2path,gzip=gzip,samPath=samPath,bamPath=bamPath)
   }
   
   cat("\nAll samples were successfully paired")

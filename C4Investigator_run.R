@@ -3,97 +3,68 @@ library(data.table)
 library(methods)
 library(stringr)
 library(plotly)
+library(argparser)
+
+p <- arg_parser("Run C4Investigator")
+# Add command line arguments
+p <- add_argument(p, "--fqDirectory", help="The path to the directory holding your fastq data")
+p <- add_argument(p, "--resultsDirectory", help="The path to your desired output directory")
+p <- add_argument(p, "--fastqPattern", help="A string that is shared across all of your fastq file names (used to find fq files and match pairs), this is usually fq or fastq", default='fq')
+p <- add_argument(p, "--threads", help="The number of compute threads you want to utilize", default=4, type='integer')
+argv <- parse_args(p)
+
+sampleDirectory <- argv$fqDirectory
+resultsDirectory <- argv$resultsDirectory
+fastqPattern <- argv$fastqPattern
+threads <- argv$threads
+
+# RSTUDIO / RSCRIPT Initialization variables ------------------------------------------------
+#sampleDirectory  <- '../tgpData/FIN/' # can be set to raw sequence or extractedFastq directory
+projectName <- 'C4Investigator' # Used as an output file prefix
+#resultsDirectory <- '../tgpData/FIN/C4Investigator/' # Set the master results directory (all pipeline output will be recorded here)
+#fastqPattern <- '_C4_'  # use '_C4_' to find files downloaded by 1KGP coordinator, otherwise use 'fastq' or whatever fits your data
+#threads <- 4
+run.mode <- 'WGS' # Set this to match your sequencing data type, either WGS or targeted
 
 
+# Run mode variables ------------------------------------------------
+maxReadThreshold <- 50000
+minDP <- 20
 
-##' Checks that the input is well-formed and returns it or errors out
-assert_not_null <- function(x){
-  stopifnot(!is.null(x),length(x)>0)
-  return(x)
+if( tolower(run.mode) == 'wgs' ){
+  minDP=6
 }
 
-workingDirectory <- assert_not_null(snakemake@params[["workingDirectory"]])
-threads <- as.integer(snakemake@threads)
-resultsDirectory <- assert_not_null(snakemake@params[["resultsDirectory"]])
-minDP <- as.numeric(assert_not_null(snakemake@params[["minDP"]]))
-projectName <- assert_not_null(snakemake@params[["projectName"]])
-maxReadThreshold <- as.integer(assert_not_null(snakemake@params[["maxReadThreshold"]]))
-output_f <- assert_not_null(unlist(snakemake@output))
-inputf1 <- normalizePath(assert_not_null(snakemake@input[["fq1"]]),mustWork=TRUE)
-inputf2 <- normalizePath(assert_not_null(snakemake@input[["fq2"]]),mustWork=TRUE)
-
-owd <- getwd()
-setwd(workingDirectory)
-
+# Preparation -------------------------------------------------------------
 source('resources/general_functions.R')
 source('resources/c4Copy_functions.R')
 source('resources/generalAlignment_functions.R')
-
-
-## Creating the sample object class
-sample <- setRefClass("sample",
-                      fields=list(name='character',
-                                  fastq1path='character',
-                                  fastq2path='character',
-                                  gzip='logical',
-                                  samPath='character',
-                                  bamPath='character',
-                                  failed='logical'))
-
-
-sessionInfo()
+source('resources/c4_analysisSupport_functions.R')
 setDTthreads(threads)
-# Preparation -------------------------------------------------------------
 outDir <- pathObj(name='output_directory',path=resultsDirectory)
 outDir$dirGen()
-
-# Build up a list of sample objects
-
-
-sampleList <- list(sample(name=assert_not_null(snakemake@params[["samplename"]]),
-                          fastq1path=inputf1,
-                          fastq2path=inputf2,
-                          gzip=TRUE,
-                          failed=FALSE))
-
-names(sampleList) <- snakemake@params[["samplename"]]
+pileupDir <- pathObj(name='pileup_directory',path=file.path(resultsDirectory,'pileups'))
+pileupDir$dirGen()
+plotDir <- pathObj(name='plot_directory',path=file.path(resultsDirectory,'plots'))
+plotDir$dirGen()
 
 
+## Read in fastq samples from the sampleDirectory
+sampleList <- sequence.paired_sample_objects(sampleDirectory, fastqPattern, resultsDirectory)
 
-c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, maxReadThreshold, minDP ){
-  
-  
-  ## Setting up the results directory
-  dir.create(resultsDirectory,showWarnings = F) ## This function will output an inconsequential warning if the directory already exists
+
+c4.alignment_script <- function( sampleList, projectName, resultsDirectory, threads, maxReadThreshold, minDP ){
+
   resultsDirectory <- normalizePath(resultsDirectory, mustWork = T) ## Make sure the results directory exists
+  plotDirectory <- normalizePath(plotDir$path, mustWork = T) ## Make sure the results directory exist
+  pileupDirectory <- normalizePath(pileupDir$path, mustWork = T) ## Make sure the results directory exist
   
-  ## Read in probe CSV
-  #c4.probeDF <- read.csv(file=file.path('resources/C4_exon_frame_shift_mut_probes.csv'),check.names=F,
-  #                       stringsAsFactors = F)
-  #row.names(c4.probeDF) <- c4.probeDF$ProbeID
-  
-
-  
-  c4.initialize_indel_file <- function(resultsDirectory){
-    path <- file.path( resultsDirectory, 'indel.bySample.txt')
-    textStr <- ''
-    cat(textStr, file=path)
-    return(path)
-  }
-  
-  c4.initialize_phasing_file <- function(resultsDirectory){
-    path <- file.path( resultsDirectory, 'snpPhasing.importantSNPs.bySample.txt')
-    textStr <- ''
-    cat(textStr, file=path)
-    return(path)
-  }
   
   #indel.path <- c4.initialize_indel_file(resultsDirectory)
-  
   #phase.path <- c4.initialize_phasing_file(resultsDirectory)
   
   ## Initialize a list for storing C4 alignments
-  c4BuildList <- list()
+  #c4BuildList <- list()
   
   ## Initialize a dataframe for storing various depth values
   resultsDF <- data.frame(matrix(0,nrow=length(sampleList),ncol=18),row.names = names(sampleList),stringsAsFactors=F)
@@ -105,11 +76,11 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
   
   for(currentSample in sampleList){
     currentSample <- bowtie2.c4_alignment(bowtie2, referencePath, threads, currentSample, resultsDirectory)
-      
+    
     currentSample <- samtools.sam_to_bam(samtools, currentSample, resultsDirectory, threads)
-      
+    
     currentSample <- bowtie2.mhc.c4_alignment(bowtie2, mhcReferencePath, threads, currentSample, resultsDirectory)
-      
+    
     currentSample <- samtools.mhc.sam_to_bam(samtools, currentSample, resultsDirectory, threads)
     
     # BAM sort
@@ -162,20 +133,6 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     #cffCountDF[currentSample$name,names(c4.mutCountList)] <- c4.mutCountList
     #write.csv(cffCountDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_cffCount.csv')))
     
-
-    
-    #samTable$reference_name <- tstrsplit(samTable$reference_name, '_')[[3]]
-    
-    ## Use the reference name conversion list to apply common gene names
-    #samTable$locus <- unlist(lapply(samTable$reference_name, function(x){referenceKeyList[[x]]}))
-    
-    ## Pull out an index of reads that aligned to C4
-    #C4ReadsPosVect <- grep('C4',samTable$locus,fixed=T)
-    
-    ## Initialize a column of the data table for storing whether the read aligned to C4 or not
-    #samTable$isC4 <- F
-    #samTable$isC4[C4ReadsPosVect] <- T ## Set the C4 bool to T for all C4 indexed reads
-    
     ## Pull out the subset of C4 aligned reads as its own data table
     c4SamTable <- samTable[isC4 == T]
     
@@ -204,7 +161,7 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     c4SamTable[, 'readTable' := alleleSetup.read_formatter( read_name, read_seq, ref_pos, locus, cigar_string), by=seq_len(nrow(c4SamTable)) ]
     cat('\n\t\tDONE')
     
-    c4BuildDF <- c4.samDT_to_depthDF(c4SamTable, resultsDirectory, currentSample$name, c4AlleleDF)
+    c4BuildDF <- c4.samDT_to_depthDF(c4SamTable, pileupDirectory, currentSample$name, c4AlleleDF)
     
     ins.coordVect <- which(c4BuildDF['INS',] > 0)
     del.coordVect <- setdiff( which(c4BuildDF['.',] > 0), inverseDeletionIndexList$C4B )
@@ -265,7 +222,7 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
     #print(p1)
     
     ## Save each plot
-    htmlwidgets::saveWidget(p1, file=file.path(resultsDirectory,paste0(currentSample$name,'_c4_plot.html')))
+    htmlwidgets::saveWidget(p1, file=file.path(plotDirectory,paste0(currentSample$name,'_c4_plot.html')))
     
     #### Various depth calculations
     
@@ -331,22 +288,42 @@ c4.run_script <- function( sampleList, projectName, resultsDirectory, threads, m
                                    'mean_c4a', 'mean_c4b', 'c4aL', 'c4bL')] <- c(medianc4DepthNum, deletionDepth, nonDeletionDepth, medianTnxbDepthNum,
                                                                                  c4aSnpGroup1Mean, c4aSnpGroup2Mean, c4bSnpGroup1Mean, c4bSnpGroup2Mean, c4aMean, c4bMean, c4aLongSnp, c4bLongSnp)
     
-    #write.csv(c4BuildDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_dp.csv')))                                  
-    write.csv(resultsDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_depth.csv')))
+    write.csv(resultsDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_detailed.csv')))
+    
+    copy.dt <- as.data.table(resultsDF,keep.rownames = T)
+    # Set C4A, C4B, C4Rg, and C4Ch copy 
+    copy.dt[,c('C4A_copy','C4Rg_copy','C4B_copy','C4Ch_copy') := c4.calc_AB_copy(wgs_c4_copy,mean_c4a_g1,mean_c4a_g2,mean_c4b_g1,mean_c4b_g2), by = 1:nrow(copy.dt) ]
+    copy.dt$CTins <- copy.dt[, (c4_exon29_ins/(c4_exon29_norm+c4_exon29_ins))*round(wgs_c4_copy,0)]
+    
+    ## Set C4S, C4L and C4 total copy
+    copy.dt$C4_copy <- copy.dt$C4A_copy + copy.dt$C4B_copy
+    copy.dt[,c('C4S_copy', 'C4L_copy') := c4.calc_SL_copy(round(wgs_c4_copy,0), mean_c4ins , median_c4del), by = 1:nrow(copy.dt) ]
+    write.csv(copy.dt[,.SD,.SDcols=c('rn','C4_copy','C4A_copy','C4B_copy','C4L_copy','C4S_copy','C4Rg_copy','C4Ch_copy')],
+              file=file.path(resultsDirectory,paste0(projectName,'_c4_summary.csv')), quote=F,row.names=F)
+    
+    ## SNP calling
+    cat('\nGenerating SNP output.')
+    sample.dt <- c4.read_dp_csv(currentSample$name, pileupDirectory, c4.feature.list, nucListConv,onlyExon = F)
+    dp.perCopy <- median( apply( sample.dt[,.SD], 2, sum) ) / copy.dt[rn == currentSample$name]$C4_copy
+    minDP <- dp.perCopy/4
+    hetRatio <- 0.5
+    sampleCopy <- copy.dt[rn == currentSample$name]$C4_copy 
+    totalDP.vect <- apply( sample.dt, 2, sum)
+    cutPos.vect <- which(totalDP.vect < minDP)
+    currentSample.snp.dt <- c4.set_snp_dt( sample.dt, hetRatio, sampleCopy, cutPos.vect )
+    currentSample.snp.dt$sampleID <- currentSample$name
+    
+    ## Saving files
+    write.csv(currentSample.snp.dt, file=file.path(pileupDirectory,paste0('C4_SNP_',currentSample$name,'.csv')), quote=F, row.names = F)
+    cat('\tDone.\n')
+    
     file.remove(currentSample[['mhcBamPath']])
-    #file.remove(currentSample[['bamPath']])
+    file.remove(currentSample[['bamPath']])
     file.remove(currentSample[['sortedBamPath']])
     file.remove(currentSample[['allDepthPath']])
   }
   
-
   return(NULL)
 }
-#write.csv(resultsDF, file=file.path(resultsDirectory,paste0(projectName,'_c4_depth.csv')))
 
-c4.run_script( sampleList, projectName, outDir$path, threads, maxReadThreshold, minDP )
-
-out_d <- normalizePath(outDir$path)
-setwd(owd)
-tar(output_f,out_d , compression = 'gzip', tar="tar")
-unlink(out_d,recursive=TRUE)
+c4.alignment_script( sampleList[1], projectName, outDir$path, threads, maxReadThreshold, minDP )

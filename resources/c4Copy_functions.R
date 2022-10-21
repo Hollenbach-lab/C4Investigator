@@ -1210,6 +1210,20 @@ run.setEndPos <- function(ref_name, ref_pos, currentReadLen){
   return(deletionIndexList[[ref_name]][ref_pos+currentReadLen-1])
 }
 
+c4.initialize_indel_file <- function(resultsDirectory){
+  path <- file.path( resultsDirectory, 'indel.bySample.txt')
+  textStr <- ''
+  cat(textStr, file=path)
+  return(path)
+}
+
+c4.initialize_phasing_file <- function(resultsDirectory){
+  path <- file.path( resultsDirectory, 'snpPhasing.importantSNPs.bySample.txt')
+  textStr <- ''
+  cat(textStr, file=path)
+  return(path)
+}
+
 c4.generate_feature_list <- function( ref.fa ){
   if( !file.exists(ref.fa) ){
     stop(paste('reference file does not exist here:',ref.fa))

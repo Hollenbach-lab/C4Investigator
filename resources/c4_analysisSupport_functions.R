@@ -20,17 +20,17 @@ c4.calc_AB_copy <- function(c4_copy, c4a_g1, c4a_g2, c4b_g1, c4b_g2){
   c4a_copy <- c4a_g1_copy
   c4b_copy <- c4b_g1_copy
   
-  cat('\n\nC4A:',
-      round(c4a_copy,2),
-      paste0('\n\tg1:',round(c4a_g1_copy,2))
-      #paste0('\n\tg2:',round(c4a_g2_copy,2))
-  )
+  #cat('\n\nC4A:',
+  #    round(c4a_copy,2),
+  #    paste0('\n\tg1:',round(c4a_g1_copy,2))
+  #    #paste0('\n\tg2:',round(c4a_g2_copy,2))
+  #)
   
-  cat('\n\nC4B:',
-      round(c4b_copy,2),
-      paste0('\n\tg1:',round(c4b_g1_copy,2))
-      #paste0('\n\tg2:',round(c4b_g2_copy,2))
-  )
+  #cat('\n\nC4B:',
+  #    round(c4b_copy,2),
+  #    paste0('\n\tg1:',round(c4b_g1_copy,2))
+  #    #paste0('\n\tg2:',round(c4b_g2_copy,2))
+  #)
   
   
   return(list('c4a_g1_copy'=round(c4a_g1_copy,0), 
@@ -158,8 +158,8 @@ nucListConv <- list('A'=1,
                     '.'=5)
 
 c4.read_dp_csv <- function(sampleID, rawData.dir, c4.feature.list, nucListConv, onlyExon=T){
-  sample.dir <- list.files(path=file.path(rawData.dir,'home'), pattern=sampleID,recursive = T,include.dirs = T,full.names = T)[[1]]
-  sample.dpDF.path <- list.files(path=sample.dir,pattern = 'c4_dp.csv',recursive=T,full.names=T)
+  sample.dpDF.path <- list.files(path=file.path(rawData.dir), pattern=sampleID,recursive = T,include.dirs = T,full.names = T)[[1]]
+  #sample.dpDF.path <- list.files(path=sample.dir,pattern = 'C4_DP',recursive=T,full.names=T)
   
   sample.dt <- fread(file=sample.dpDF.path,header=T,nrows=5)
   sample.dt <- sample.dt[,2:ncol(sample.dt)]
