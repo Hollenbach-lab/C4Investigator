@@ -13,8 +13,8 @@ R
 
 
 ## System dependencies download and install
-* bowtie2 (tested with v, but should be compatible with newer versions)
-* samtools (tested with v, but should be compatible with newer versions)
+* bowtie2 (tested with v2.4.1, but should be compatible with newer versions)
+* samtools (tested with v1.11, but should be compatible with newer versions)
 
 
 ### 1. Download C4Investigator and run a 1000 Genomes population
