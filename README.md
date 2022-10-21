@@ -29,9 +29,9 @@ git clone https://github.com/wesleymarin/C4Investigator.git --single-branch --br
 cd C4Investigator/ && \
 Rscript 1000Genomes_download_coordinator.R --population FIN --fqDirectory <fqDirectory> --threads <threads>
 ```
---fqDirectory     Directory to download FQ files to
+`--fqDirectory`     Directory to download FQ files to
 
---threads         Number of compute threads to utilize
+`--threads`         Number of compute threads to utilize
 
 
 ### 3. Run on 1000Genomes data, or your own data (starting with fastq files)
@@ -41,24 +41,24 @@ cd C4Investigator/ &&
 Rscript C4Investigator_run.R --fqDirectory <FQ_directory> --resultsDirectory <OutputDirectory> --fastqPattern <fq/fastq> --threads <threads>
 ```
 
---fqDirectory       Directory holding your fastq data.
+`--fqDirectory`     Directory holding your fastq data.
 
---resultsDirectory  Desired output directory
+`--resultsDirectory`  Desired output directory
 
---fastqPattern      A string that is shared across all of your fastq file names (used to find fq files and match pairs), this is usually fq or fastq
+`--fastqPattern`      A string that is shared across all of your fastq file names (used to find fq files and match pairs), this is usually fq or fastq
 
---threads           Number of compute threads to utilize
+`--threads`          Number of compute threads to utilize
 
 
 ### 4. Output
-C4Investigator_c4_summary.csv   <- this is the main output file that contains C4 copy number calls.
+`C4Investigator_c4_summary.csv`   <- this is the main output file that contains C4 copy number calls.
 
-C4Investigator_c4_detailed.csv  <- This file contains more detailed information that is used to determine C4 copy number calls.
+`C4Investigator_c4_detailed.csv`  <- This file contains more detailed information that is used to determine C4 copy number calls.
 
-pileups/C4_DP_<sampleID>.csv    <- This is the alignment pileup file used for SNP calling
+`pileups/C4_DP_<sampleID>.csv`    <- This is the alignment pileup file used for SNP calling
                                 
-pileups/C4_SNP_<sampleID>.csv   <- This is the file containing C4 SNP calls
+`pileups/C4_SNP_<sampleID>.csv`   <- This is the file containing C4 SNP calls
                                  
-plots/<sampleID>_c4_plot.html   <- A web viewable, interactive plot of the C4 alignment
+`plots/<sampleID>_c4_plot.html`   <- A web viewable, interactive plot of the C4 alignment
                                  
                                  
