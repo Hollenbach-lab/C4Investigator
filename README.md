@@ -1,8 +1,6 @@
 # C4Investigator
 An R-based bioinformatic pipeline to determine complement component 4 (C4) copy number and genotypes from short-read genomic sequencing data.
 
-This branch of C4Investigator is setup to be run using snakemake [https://snakemake.readthedocs.io/]
-
 
 ## Language
 R
@@ -15,63 +13,52 @@ R
 
 
 ## System dependencies download and install
-* conda 
-* snakemake 
-
-You can download and install conda [https://conda.io/en/latest/miniconda.html](here)
-
-### 1. Install conda
-
-```shell
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3.sh  && bash ~/miniconda3.sh -b  && . ~/miniconda3/etc/profile.d/conda.sh && conda activate base && conda install mamba -n base -c conda-forge
-```
-
-### 2. Install snakemake 
-
-```shell
-mamba create -c conda-forge -c bioconda -n snakemake snakemake
-```
+* bowtie2 (tested with v2.4.1, but should be compatible with newer versions)
+* samtools (tested with v1.11, but should be compatible with newer versions)
 
 
-### 3. Download PING and run the test example
-
+### 1. Download C4Investigator and run a 1000 Genomes population
 
 ```shell
 git clone https://github.com/wesleymarin/C4Investigator.git --single-branch --branch master
 ```
 
-### 4. Run the test example
+### 2. Download 1000Genomes data to test
 
 ```shell
-cd C4Investigator/workflow && \
-conda activate snakemake && \
-snakemake -j 64 --use-conda --verbose --conda-frontend mamba # run snakemake with (up to) 64 threads, using conda for dependency management, and mamba as the conda frontend
+cd C4Investigator/ && \
+Rscript 1000Genomes_download_coordinator.R --population FIN --fqDirectory <fqDirectory> --threads <threads>
 ```
+`--fqDirectory`     Directory to download FQ files to
 
-### 5. Run on any of the 1000 genome samples
+`--threads`         Number of compute threads to utilize
+
+
+### 3. Run on 1000Genomes data, or your own data (starting with fastq files)
 
 ```shell
-cd C4Investigator/workflow && \
-conda activate snakemake && \
-snakemake -j 64 --use-conda --verbose --conda-frontend mamba ../output/tgp/NA12004.tar.gz ../output/tgp/HG04200.tar.gz 
+cd C4Investigator/ &&
+Rscript C4Investigator_run.R --fqDirectory <FQ_directory> --resultsDirectory <OutputDirectory> --fastqPattern <fq/fastq> --threads <threads>
 ```
 
-### 6. Run on your own data (starting with bam files)
+`--fqDirectory`     Directory holding your fastq data.
 
-Add all your bam files to the directory (within the `C4Investigator` directory) `input/data/bam`. Each file in the directory `input/data/bam` should correspond to a single sample, and have a file name with the pattern `{sample}.bam`, (do not use underscores in the file name).  To run the two samples `foo.bam` and `bar.bam`
+`--resultsDirectory`  Desired output directory
 
-```shell
-cp /some_other_dir/foo.bar /some_other_dir/bar.bam input/data/bam/ &&\
-cd C4Investigator/workflow && \
-conda activate snakemake && \
-snakemake -j 64 --use-conda --verbose --conda-frontend mamba ../output/data/foo.tar.gz ../output/data/bar.tar.gz 
-```
+`--fastqPattern`      A string that is shared across all of your fastq file names (used to find fq files and match pairs), this is usually fq or fastq
 
-snakemake will also automatically run C4Investigator for every bam file in the `input/data/bam` directory:
+`--threads`          Number of compute threads to utilize
 
-```shell
-cp /some_other_dir/foo.bar /some_other_dir/bar.bam input/data/bam/ &&\
-cd C4Investigator/workflow && \
-conda activate snakemake && \
-snakemake -j 64 --use-conda --verbose --conda-frontend mamba 
-```
+
+### 4. Output
+`C4Investigator_c4_summary.csv`   <- this is the main output file that contains C4 copy number calls.
+
+`C4Investigator_c4_detailed.csv`  <- This file contains more detailed information that is used to determine C4 copy number calls.
+
+`pileups/C4_DP_<sampleID>.csv`    <- This is the alignment pileup file used for SNP calling
+                                
+`pileups/C4_SNP_<sampleID>.csv`   <- This is the file containing C4 SNP calls
+                                 
+`plots/<sampleID>_c4_plot.html`   <- A web viewable, interactive plot of the C4 alignment
+                                 
+                                 
