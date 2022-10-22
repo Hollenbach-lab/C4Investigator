@@ -141,7 +141,7 @@ sequence.paired_sample_objects <- function(sample_directory, fastq_pattern='fast
     bamPath <- file.path(resultsDirectory,paste0(names(pairedFastq),'.bam'))
     
     ## Building a sample object and adding it to sampleList
-    output.sampleList[[names(pairedFastq)]] <- sample(name=fastq_name,fastq1path=fastq1path,fastq2path=fastq2path,gzip=gzip,samPath=samPath,bamPath=bamPath)
+    output.sampleList[[fastq_name]] <- sample(name=fastq_name,fastq1path=fastq1path,fastq2path=fastq2path,gzip=gzip,samPath=samPath,bamPath=bamPath)
   }
   
   cat("\nAll samples were successfully paired")
