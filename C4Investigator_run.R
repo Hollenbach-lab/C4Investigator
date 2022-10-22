@@ -326,4 +326,4 @@ c4.alignment_script <- function( sampleList, projectName, resultsDirectory, thre
   return(NULL)
 }
 
-c4.alignment_script( sampleList[1], projectName, outDir$path, threads, maxReadThreshold, minDP )
+c4.alignment_script( sampleList, projectName, outDir$path, threads, maxReadThreshold, minDP )
