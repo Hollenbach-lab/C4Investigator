@@ -43,7 +43,7 @@ cram_to_fq <- function(sampleID, cram_path, output_path){
     cat(paste('\n\t',f1_path,'already exists, skipping this conversion..'))
     return(list('f1'=f1_path,'f2'=f2_path))}
   
-  cram2fq <- system2('samtools',c('sort','-n','-M',
+  cram2fq <- system2('samtools',c('sort','-n',
                                   cram_path,
                                   paste('-O','bam'),
                                   '|',
