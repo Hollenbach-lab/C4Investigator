@@ -62,3 +62,5 @@ singularity exec c4investigator.sif Rscript C4Investigator_run.R --fqDirectory <
 `plots/<sampleID>_c4_plot.html`   <- A web viewable, interactive plot of the C4 alignment
                                  
                                  
+# Troubleshooting
+Please send a copy of your error message to rayo.suseno@ucsf.edu, or raise an issue in this repository. We would be happy to receive community feedback as we aim to continuously improve our pipeline.
