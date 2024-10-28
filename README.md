@@ -12,33 +12,33 @@ R
 * Windows (untested)
 
 
-## System dependencies download and install
-* bowtie2 (tested with v2.4.1, but should be compatible with newer versions)
-* samtools (tested with v1.11, but should be compatible with newer versions)
 
-
-### 1. Download C4Investigator and run a 1000 Genomes population
+### 1. Download C4Investigator 
 
 ```shell
-git clone https://github.com/wesleymarin/C4Investigator.git --single-branch --branch master
+git clone https://github.com/Hollenbach-lab/C4Investigator.git
+cd C4Investigator
 ```
 
-### 2. Download 1000Genomes data to test
+### 2. Build the Singularity container
+```shell
+singularity build --fakeroot c4investigator.sif c4investigator.def
+```
+
+### 3. Download 1000Genomes data to test
 
 ```shell
-cd C4Investigator/ && \
-Rscript 1000Genomes_download_coordinator.R --population FIN --fqDirectory <fqDirectory> --threads <threads>
+singularity exec c4investigator.sif Rscript 1000Genomes_download_coordinator.R --population FIN --fqDirectory <fqDirectory> --threads <threads>
 ```
 `--fqDirectory`     Directory to download FQ files to
 
 `--threads`         Number of compute threads to utilize
 
 
-### 3. Run on 1000Genomes data, or your own data (starting with fastq files)
+### 4. Run on 1000Genomes data, or your own data (starting with fastq files)
 
 ```shell
-cd C4Investigator/ &&
-Rscript C4Investigator_run.R --fqDirectory <FQ_directory> --resultsDirectory <OutputDirectory> --fastqPattern <fq/fastq> --threads <threads>
+singularity exec c4investigator.sif Rscript C4Investigator_run.R --fqDirectory <FQ_directory> --resultsDirectory <OutputDirectory> --fastqPattern <fq/fastq> --threads <threads>
 ```
 
 `--fqDirectory`     Directory holding your fastq data.
@@ -50,7 +50,7 @@ Rscript C4Investigator_run.R --fqDirectory <FQ_directory> --resultsDirectory <Ou
 `--threads`          Number of compute threads to utilize
 
 
-### 4. Output
+### 5. Output
 `C4Investigator_c4_summary.csv`   <- this is the main output file that contains C4 copy number calls.
 
 `C4Investigator_c4_detailed.csv`  <- This file contains more detailed information that is used to determine C4 copy number calls.
