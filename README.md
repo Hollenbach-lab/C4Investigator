@@ -1,17 +1,12 @@
 # C4Investigator
-An R-based bioinformatic pipeline to determine complement component 4 (C4) copy number and genotypes from short-read genomic sequencing data.
+An R-based bioinformatic pipeline to determine complement component 4 (C4) copy number and genotypes from short-read genomic sequencing data. C4Investigator article can be found [here](https://pmc.ncbi.nlm.nih.gov/articles/PMC11099535/).
 
 
 ## Language
 R
 
 
-## System compatibility
-* Linux (tested on Ubuntu, CentOS)
-* OS X
-* Windows (untested)
-
-
+## Steps
 
 ### 1. Download C4Investigator 
 
